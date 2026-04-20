@@ -3,69 +3,35 @@
 namespace App\Services;
 
 use App\Models\Supplier;
-use App\Models\CltLayup;
-use App\Models\CltLayer;
-use Exception;
 
 class ImportService
 {
-    public function import($supplierId, array $data, $strategy = 'overwrite')
+    public function import(array $data)
     {
-        $supplier = Supplier::findOrFail($supplierId);
+        foreach ($data as $supplierData) {
 
-        foreach ($data['layups'] as $layupData) {
+            $supplier = Supplier::updateOrCreate(
+                ['name' => $supplierData['name']],
+                ['name' => $supplierData['name']]
+            );
 
-            $layup = CltLayup::firstOrCreate([
-                'supplier_id' => $supplier->id,
-                'name' => $layupData['name']
-            ]);
+            foreach ($supplierData['layups'] ?? [] as $layupData) {
 
-            foreach ($layupData['layers'] as $layerData) {
+                $layup = $supplier->layups()->updateOrCreate(
+                    ['name' => $layupData['name']],
+                    ['name' => $layupData['name']]
+                );
 
-                $existingLayer = CltLayer::where('layup_id', $layup->id)
-                    ->where('layer_order', $layerData['layer_order'])
-                    ->first();
-
-                if ($existingLayer) {
-
-                    if ($this->isConflict($existingLayer, $layerData)) {
-                        $this->resolveConflict($existingLayer, $layerData, $strategy);
-                    }
-
-                } else {
-                    CltLayer::create([
-                        'layup_id' => $layup->id,
-                        ...$layerData
-                    ]);
+                    $layup->layers()->updateOrCreate(
+                        ['layer_order' => $layerData['layer_order']],
+                        [
+                            'thickness' => $layerData['thickness'] ?? 0,
+                            'width' => $layerData['width'] ?? 0,
+                            'angle' => $layerData['angle'] ?? 0,
+                        ]
+                    );
                 }
             }
-        }
-    }
-
-    private function isConflict($existing, $incoming)
-    {
-        return
-            $existing->thickness != $incoming['thickness'] ||
-            $existing->width != $incoming['width'] ||
-            $existing->angle != $incoming['angle'];
-    }
-
-    private function resolveConflict($existing, $incoming, $strategy)
-    {
-        switch ($strategy) {
-            case 'overwrite':
-                $existing->update($incoming);
-                break;
-
-            case 'skip':
-                // do nothing
-                break;
-
-            case 'reject':
-                throw new Exception('Conflict detected');
-
-            default:
-                $existing->update($incoming);
         }
     }
 }

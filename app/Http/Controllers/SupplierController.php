@@ -94,20 +94,41 @@ class SupplierController extends Controller
         ]);
     }
 
-    public function import(Request $request, $id, ImportService $importService)
-    {
-        $request->validate([
-            'data' => 'required|array'
-        ]);
+public function import(Request $request, ImportService $importService)
+{
+    if ($request->hasFile('file')) {
+        $content = file_get_contents($request->file('file')->getRealPath());
+        $json = json_decode($content, true);
 
-        $importService->import(
-            $id,
-            $request->data,
-            $request->strategy ?? 'overwrite'
-        );
+        if (!$json) {
+            return response()->json([
+                'message' => 'File JSON tidak valid'
+            ], 422);
+        }
 
-        return response()->json([
-            'message' => 'Import success'
-        ]);
+        $data = isset($json[0]) ? $json : [$json];
+    } else {
+        $data = $request->input('data');
+
+        if (!$data) {
+            return response()->json([
+                'message' => 'Data tidak ditemukan'
+            ], 422);
+        }
     }
+
+    foreach ($data as $item) {
+        if (!isset($item['name'])) {
+            return response()->json([
+                'message' => 'Semua supplier harus punya name'
+            ], 422);
+        }
+    }
+
+    $importService->import($data);
+
+    return response()->json([
+        'message' => 'Import success'
+    ]);
+}
 }

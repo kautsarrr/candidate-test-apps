@@ -20,7 +20,7 @@
 
                 </div>
                 <div>
-                    <x-primary-button onclick="openImportModal()">
+                    <x-primary-button x-data x-on:click="$dispatch('open-modal', 'import-supplier')">
                         <i class="fa-solid fa-upload mr-2"></i>
                         Import
                     </x-primary-button>
@@ -61,11 +61,11 @@
 
             <x-modal name="import-supplier" :show="false">
                 <div class="p-6">
+                    <input type="hidden" id="import_supplier_id" value="1">
                     <h2 class="text-lg font-bold mb-4">Import Supplier JSON</h2>
 
                     <form id="importSupplier">
-                        <textarea id="jsonInput" class="w-full border p-2 h-60"
-                            placeholder="Paste JSON di sini"></textarea>
+                        <input type="file" id="jsonFile" accept=".json" class="w-full border p-2">
 
                         <select id="strategy" class="w-full border p-2 mt-3">
                             <option value="overwrite">Overwrite</option>
@@ -74,8 +74,8 @@
                         </select>
 
                         <div class="flex gap-2 mt-4">
-                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">
-                                Import
+                            <button onclick="importSupplier()" class="bg-blue-600 text-white px-4 py-2 rounded">
+                                Import JSON
                             </button>
 
                             <button type="button"
@@ -204,33 +204,47 @@
                 alert('Terjadi kesalahan server');
             }
         });
+    </script>
+    <script>
+        async function exportSupplier(id) {
+            const res = await fetch(`/api/suppliers/${id}/export`);
+            if (!res.ok) {
+                alert('Gagal export data');
+                return;
+            }
+            const result = await res.json();
+            const data = JSON.stringify(result.data, null, 2);
+            const blob = new Blob([data], {
+                type: "application/json"
+            });
+            const url = URL.createObjectURL(blob);
 
-        document.getElementById('importSupplier').addEventListener('submit', async function(e) {
-            e.preventDefault();
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `supplier-${id}.json`;
+            document.body.appendChild(a);
+            a.click();
 
-            let json;
+            URL.revokeObjectURL(url);
+        }
+        async function importSupplier() {
+            const file = document.getElementById('jsonFile').files[0];
 
-            try {
-                json = JSON.parse(document.getElementById('jsonInput').value);
-            } catch (err) {
-                alert('JSON tidak valid');
+            if (!file) {
+                alert('Pilih file JSON dulu');
                 return;
             }
 
-            const strategy = document.getElementById('strategy').value;
-            const supplierId = document.getElementById('import_supplier_id').value;
+            const formData = new FormData();
+            formData.append('file', file);
 
             try {
-                const res = await fetch(`/api/suppliers/${supplierId}/import?strategy=${strategy}`, {
+                const res = await fetch('/api/suppliers/import', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        'Accept': 'application/json'
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
-                    body: JSON.stringify({
-                        data: json
-                    })
+                    body: formData
                 });
 
                 if (!res.ok) {
@@ -242,31 +256,17 @@
                 alert('Import berhasil');
                 location.reload();
 
-            } catch (error) {
-                console.error(error);
-                alert('Terjadi kesalahan server');
+            } catch (err) {
+                console.error(err);
+                alert('Server error');
             }
-        });
-    </script>
-    <script>
-        async function exportSupplier(id) {
-            const res = await fetch(`/api/suppliers/${id}/export`);
-            const result = await res.json();
-            const data = JSON.stringify(result.data, null, 2);
-            const blob = new Blob([data], {
-                type: "application/json"
-            });
-            const url = URL.createObjectURL(blob);
-
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `supplier-${id}.json`;
-            a.click();
-
-            URL.revokeObjectURL(url);
         }
         async function exportAllSuppliers() {
-            const res = await fetch('/api/suppliers/export-all');
+            const res = await fetch('/api/suppliers/exportall');
+            if (!res.ok) {
+                alert('Gagal export semua data');
+                return;
+            }
             const result = await res.json();
 
             const blob = new Blob(
@@ -280,6 +280,7 @@
             const a = document.createElement("a");
             a.href = url;
             a.download = "suppliers.json";
+            document.body.appendChild(a);
             a.click();
 
             URL.revokeObjectURL(url);
